@@ -1,0 +1,46 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as admin from 'firebase-admin';
+
+@Injectable()
+export class FcmService {
+  private readonly logger = new Logger(FcmService.name);
+  private enabled = false;
+
+  constructor(config: ConfigService) {
+    const raw = config.get<string>('FCM_SERVICE_ACCOUNT_JSON');
+    if (!raw) {
+      this.enabled = false;
+      return;
+    }
+
+    const credential = admin.credential.cert(JSON.parse(raw));
+    if (admin.apps.length === 0) {
+      admin.initializeApp({ credential });
+    }
+    this.enabled = true;
+  }
+
+  async sendIncomingCall(token: string | null, payload: {
+    session_id: string;
+    caller_name: string;
+    call_type: string;
+  }) {
+    if (!this.enabled || !token) {
+      this.logger.warn('FCM is not configured or target has no token; skipping push notification');
+      return false;
+    }
+
+    await admin.messaging().send({
+      token,
+      data: payload,
+      notification: {
+        title: 'Incoming call',
+        body: `${payload.caller_name} is calling`,
+      },
+      android: { priority: 'high' },
+      apns: { payload: { aps: { contentAvailable: true, sound: 'default' } } },
+    });
+    return true;
+  }
+}

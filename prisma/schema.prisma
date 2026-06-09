@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeviceType {
+  raspberry
+  mobile
+}
+
+enum CallStatus {
+  ringing
+  active
+  ended
+}
+
+model Device {
+  id              String        @id @default(uuid())
+  deviceType      DeviceType    @map("device_type")
+  ownerName       String?       @map("owner_name")
+  authTokenHash   String        @map("auth_token_hash")
+  fcmToken        String?       @map("fcm_token")
+  pairingPin      String?       @unique @map("pairing_pin")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+  raspberryLinks  Contact[]     @relation("RaspberryContacts")
+  mobileLinks     Contact[]     @relation("MobileContacts")
+  callsMade       CallSession[] @relation("CallsMade")
+  callsReceived   CallSession[] @relation("CallsReceived")
+
+  @@index([deviceType])
+  @@map("devices")
+}
+
+model Contact {
+  id                String   @id @default(uuid())
+  raspberryDeviceId String   @map("raspberry_device_id")
+  mobileDeviceId    String   @map("mobile_device_id")
+  displayName       String   @map("display_name")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  raspberryDevice Device @relation("RaspberryContacts", fields: [raspberryDeviceId], references: [id], onDelete: Cascade)
+  mobileDevice    Device @relation("MobileContacts", fields: [mobileDeviceId], references: [id], onDelete: Cascade)
+
+  @@unique([raspberryDeviceId, mobileDeviceId])
+  @@index([mobileDeviceId])
+  @@map("contacts")
+}
+
+model CallSession {
+  id             String     @id @default(uuid())
+  callerDeviceId String     @map("caller_device_id")
+  calleeDeviceId String     @map("callee_device_id")
+  status         CallStatus @default(ringing)
+  startedAt      DateTime   @default(now()) @map("started_at")
+  answeredAt     DateTime?  @map("answered_at")
+  endedAt        DateTime?  @map("ended_at")
+  serverAUrl     String     @map("server_a_url")
+  serverBUrl     String     @map("server_b_url")
+  endReason      String?    @map("end_reason")
+
+  caller Device @relation("CallsMade", fields: [callerDeviceId], references: [id])
+  callee Device @relation("CallsReceived", fields: [calleeDeviceId], references: [id])
+
+  @@index([callerDeviceId])
+  @@index([calleeDeviceId])
+  @@index([status])
+  @@map("call_sessions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?  @map("actor_id")
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([action])
+  @@map("audit_logs")
+}

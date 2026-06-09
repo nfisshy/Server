@@ -1,0 +1,16 @@
+[Unit]
+Description=Blind Assist Raspberry Background Listener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/raspberry-client
+ExecStart=/home/pi/raspberry-client/.venv/bin/python /home/pi/raspberry-client/background_listener.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=multi-user.target
