@@ -26,8 +26,13 @@ export class FcmService {
     caller_name: string;
     call_type: string;
   }) {
-    if (!this.enabled || !token) {
-      this.logger.warn('FCM is not configured or target has no token; skipping push notification');
+    if (!this.enabled) {
+      this.logger.error('FCM NOT CONFIGURED');
+      return false;
+    }
+
+    if (!token) {
+      this.logger.error('TARGET DEVICE HAS NO FCM TOKEN');
       return false;
     }
 

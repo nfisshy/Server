@@ -7,6 +7,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
 import { RealtimeService } from './realtime.service';
@@ -20,6 +21,8 @@ interface AuthedSocket extends Socket {
   path: '/ws',
 })
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  private readonly logger = new Logger(RealtimeGateway.name);
+
   @WebSocketServer()
   server!: Server;
 
@@ -43,7 +46,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       await this.auth.verifyDeviceToken(deviceId, token);
       client.deviceId = deviceId;
       await this.realtime.markOnline(deviceId, client.id);
-    } catch {
+    } catch (error) {
+      this.logger.warn(`Socket rejected: ${error instanceof Error ? error.message : String(error)}`);
       client.disconnect(true);
     }
   }

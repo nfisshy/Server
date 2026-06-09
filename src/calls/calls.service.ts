@@ -142,8 +142,8 @@ export class CallsService {
         callerDeviceId,
         calleeDeviceId,
         status: CallStatus.ringing,
-        serverAUrl: this.config.getOrThrow<string>('SERVER_A_URL'),
-        serverBUrl: this.config.getOrThrow<string>('SERVER_B_URL'),
+        serverAUrl: this.config.get<string>('SERVER_A_URL') ?? '',
+        serverBUrl: this.config.get<string>('SERVER_B_URL') ?? '',
       },
     });
     await this.cacheSession(session);
