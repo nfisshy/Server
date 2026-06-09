@@ -69,4 +69,16 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     await this.realtime.heartbeat(deviceId, client.id);
     client.emit('heartbeat_ack', {});
   }
+
+  @SubscribeMessage('call_signal')
+  async callSignal(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody() body: { session_id?: string; signal_type?: string; [key: string]: unknown },
+  ) {
+    if (!client.deviceId || !body.session_id || !body.signal_type) {
+      client.disconnect(true);
+      return;
+    }
+    await this.realtime.routeCallSignal(client.deviceId, body.session_id, body.signal_type, body);
+  }
 }

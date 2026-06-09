@@ -62,6 +62,10 @@ class RealtimeClient:
         def call_ended(data: dict[str, Any]) -> None:
             self.events.put(("call_ended", data))
 
+        @self.sio.on("peer_signal")
+        def peer_signal(data: dict[str, Any]) -> None:
+            self.events.put(("peer_signal", data))
+
         @self.sio.on("ai_video")
         def ai_video(data: dict[str, Any]) -> None:
             self.events.put(("ai_video", data))
@@ -98,3 +102,11 @@ class RealtimeClient:
                 except Exception as exc:
                     self.events.put(("socket_error", {"message": str(exc)}))
             time.sleep(30)
+
+    def send_call_signal(self, session_id: str, signal_type: str) -> None:
+        if not self.sio.connected:
+            return
+        try:
+            self.sio.emit("call_signal", {"session_id": session_id, "signal_type": signal_type})
+        except Exception as exc:
+            self.events.put(("socket_error", {"message": str(exc)}))

@@ -36,16 +36,15 @@ export class FcmService {
       return false;
     }
 
-    await admin.messaging().send({
-      token,
-      data: payload,
-      notification: {
-        title: 'Incoming call',
-        body: `${payload.caller_name} is calling`,
-      },
-      android: { priority: 'high' },
-      apns: { payload: { aps: { contentAvailable: true, sound: 'default' } } },
-    });
+      await admin.messaging().send({
+        token,
+        data: payload,
+        android: {
+          priority: 'high',
+          ttl: 120000,
+        },
+        apns: { payload: { aps: { contentAvailable: true, sound: 'default' } } },
+      });
     return true;
   }
 }

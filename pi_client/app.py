@@ -45,6 +45,9 @@ class RaspberryApp(tk.Tk):
         self.call_status_label: tk.Label | None = None
         self.pending_call_path = pending_call_path
         self.history_path = Path(self.config_data["history_file"])
+        self.ring_signal_after_id: str | None = None
+        self.active_signal_after_id: str | None = None
+        self.ring_timeout_after_id: str | None = None
 
         self._build_style()
         self._bind_keys()
@@ -320,6 +323,7 @@ class RaspberryApp(tk.Tk):
 
         if self.current_session_id:
             self.media.start_video_upload(self.current_session_id)
+            self._start_active_signals(self.current_session_id)
 
     def show_outgoing_ringing(self) -> None:
         self.clear()
@@ -387,6 +391,7 @@ class RaspberryApp(tk.Tk):
             self.call_state = "ringing_outgoing"
             self._append_history("outgoing", name, self.current_session_id, "ringing")
             self.show_outgoing_ringing()
+            self._start_ringing_signals(self.current_session_id)
         except Exception as exc:
             messagebox.showerror("Call failed", str(exc))
 
@@ -398,6 +403,7 @@ class RaspberryApp(tk.Tk):
             self.api.answer_call(self.current_session_id)
             self.call_state = "active"
             self._append_history("incoming", self.current_peer_name or "Mobile caller", self.current_session_id, "active")
+            self._stop_ringing_signals()
             self.show_active_call()
         except Exception as exc:
             messagebox.showerror("Answer failed", str(exc))
@@ -413,6 +419,7 @@ class RaspberryApp(tk.Tk):
         peer_name = self.current_peer_name or "Unknown"
         self.ringtone.stop()
         self.media.stop_video_upload()
+        self._stop_call_signals()
         try:
             self.api.end_call(session_id, reason)
         except ApiError:
@@ -459,9 +466,11 @@ class RaspberryApp(tk.Tk):
             self.current_peer_name = payload.get("caller_name", "Mobile caller")
             self.call_state = "ringing_incoming"
             self.show_incoming(payload)
+            self._start_ringing_signals(self.current_session_id)
         elif name == "call_accepted":
             self.current_session_id = payload.get("session_id", self.current_session_id)
             self.call_state = "active"
+            self._stop_ringing_signals()
             self.show_active_call()
         elif name == "call_ended":
             was_ringing = self.call_state in {"ringing_outgoing", "ringing_incoming"}
@@ -471,9 +480,14 @@ class RaspberryApp(tk.Tk):
             self.call_state = None
             self.ringtone.stop()
             self.media.stop_video_upload()
+            self._stop_call_signals()
             self.show_home("contacts")
             if was_ringing:
                 messagebox.showinfo("Call ended", f"Call was not answered: {reason}")
+            else:
+                messagebox.showinfo("Call ended", "Call ended")
+        elif name == "peer_signal":
+            self._handle_peer_signal(payload)
         elif name == "ai_video":
             url = payload.get("video_url")
             if url:
@@ -488,6 +502,71 @@ class RaspberryApp(tk.Tk):
             if self.call_status_label:
                 self.call_status_label.configure(text=message, fg="#fca5a5")
             print(message, flush=True)
+
+    def _handle_peer_signal(self, payload: dict[str, Any]) -> None:
+        session_id = payload.get("session_id")
+        signal_type = payload.get("signal_type")
+        if not session_id or session_id != self.current_session_id:
+            return
+        if signal_type == "ringing" and self.call_state in {"ringing_outgoing", "ringing_incoming"}:
+            return
+        if signal_type == "active_ping" and self.call_state == "active":
+            if self.call_status_label:
+                self.call_status_label.configure(text="Call connected - peer signal active", fg="#bbf7d0")
+
+    def _start_ringing_signals(self, session_id: str | None) -> None:
+        if not session_id:
+            return
+        self._stop_ringing_signals()
+        self._send_call_signal(session_id, "ringing")
+        self.ring_signal_after_id = self.after(2000, lambda: self._ringing_signal_tick(session_id))
+        self.ring_timeout_after_id = self.after(120_000, lambda: self._ringing_timeout(session_id))
+
+    def _ringing_signal_tick(self, session_id: str) -> None:
+        if self.current_session_id != session_id or self.call_state not in {"ringing_outgoing", "ringing_incoming"}:
+            return
+        self._send_call_signal(session_id, "ringing")
+        self.ring_signal_after_id = self.after(2000, lambda: self._ringing_signal_tick(session_id))
+
+    def _ringing_timeout(self, session_id: str) -> None:
+        if self.current_session_id == session_id and self.call_state in {"ringing_outgoing", "ringing_incoming"}:
+            self.end_call("missed_timeout")
+
+    def _start_active_signals(self, session_id: str) -> None:
+        if self.active_signal_after_id:
+            self.after_cancel(self.active_signal_after_id)
+            self.active_signal_after_id = None
+        self._send_call_signal(session_id, "active_ping")
+        self.active_signal_after_id = self.after(5000, lambda: self._active_signal_tick(session_id))
+
+    def _active_signal_tick(self, session_id: str) -> None:
+        if self.current_session_id != session_id or self.call_state != "active":
+            return
+        self._send_call_signal(session_id, "active_ping")
+        self.active_signal_after_id = self.after(5000, lambda: self._active_signal_tick(session_id))
+
+    def _send_call_signal(self, session_id: str, signal_type: str) -> None:
+        if self.realtime:
+            self.realtime.send_call_signal(session_id, signal_type)
+
+    def _stop_ringing_signals(self) -> None:
+        for attr in ("ring_signal_after_id", "ring_timeout_after_id"):
+            after_id = getattr(self, attr)
+            if after_id:
+                try:
+                    self.after_cancel(after_id)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
+    def _stop_call_signals(self) -> None:
+        self._stop_ringing_signals()
+        if self.active_signal_after_id:
+            try:
+                self.after_cancel(self.active_signal_after_id)
+            except Exception:
+                pass
+            self.active_signal_after_id = None
 
     def _render_camera_frame(self, ppm: bytes | None) -> None:
         if not ppm or not self.camera_label:
@@ -511,6 +590,7 @@ class RaspberryApp(tk.Tk):
             payload = json.loads(path.read_text(encoding="utf-8"))
             path.unlink(missing_ok=True)
             self.show_incoming(payload)
+            self._start_ringing_signals(self.current_session_id)
             self.lift()
             self.attributes("-topmost", True)
             self.after(1200, lambda: self.attributes("-topmost", False))

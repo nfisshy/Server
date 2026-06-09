@@ -8,7 +8,7 @@ DEFAULT_CONFIG = {
     "socketio_path": "ws",
     "state_file": "state.json",
     "history_file": "call_history.json",
-    "incoming_timeout_seconds": 60,
+    "incoming_timeout_seconds": 120,
     "camera_index": 0,
     "camera_fps": 30,
     "camera_warmup_seconds": 1.2,
