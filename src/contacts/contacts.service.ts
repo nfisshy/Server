@@ -11,7 +11,13 @@ export class ContactsService {
       where: { raspberryDeviceId },
       include: {
         mobileDevice: {
-          select: { id: true, ownerName: true, fcmToken: true, createdAt: true, updatedAt: true },
+          select: {
+            id: true,
+            ownerName: true,
+            pairingPin: true,
+            createdAt: true,
+            updatedAt: true,
+          },
         },
       },
       orderBy: { createdAt: 'asc' },

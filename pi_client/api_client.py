@@ -49,8 +49,9 @@ class ApiClient:
         )
 
     def upload_video_chunk(self, session_id: str, path: Path) -> dict[str, Any]:
+        content_type = "video/x-motion-jpeg" if path.suffix.lower() in {".mjpeg", ".mjpg"} else "video/h264"
         with path.open("rb") as file_handle:
-            files = {"file": (path.name, file_handle, "video/h264")}
+            files = {"file": (path.name, file_handle, content_type)}
             data = {"session_id": session_id}
             return self._request("POST", "/pipeline/a/start", data=data, files=files, timeout=90)
 

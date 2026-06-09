@@ -37,7 +37,12 @@ class RaspberryApp(tk.Tk):
         self.ringtone = RingtonePlayer(self.config_data)
         self.realtime: RealtimeClient | None = None
         self.current_session_id: str | None = None
+        self.current_peer_name: str | None = None
+        self.call_state: str | None = None
         self.incoming_after_id: str | None = None
+        self.camera_label: tk.Label | None = None
+        self.camera_photo: Any = None
+        self.call_status_label: tk.Label | None = None
         self.pending_call_path = pending_call_path
         self.history_path = Path(self.config_data["history_file"])
 
@@ -75,6 +80,9 @@ class RaspberryApp(tk.Tk):
         )
 
     def clear(self) -> None:
+        self.deiconify()
+        self.camera_label = None
+        self.call_status_label = None
         if self.incoming_after_id:
             self.after_cancel(self.incoming_after_id)
             self.incoming_after_id = None
@@ -101,6 +109,7 @@ class RaspberryApp(tk.Tk):
             justify="center",
         ).pack(pady=18)
         ttk.Button(box, text="Register And Create PIN", style="Big.TButton", command=self.register).pack(pady=20)
+        ttk.Button(box, text="Exit App", style="Big.TButton", command=self.destroy).pack(pady=8)
         ttk.Label(box, text=f"Server: {self.config_data['server_base_url']}", style="Muted.TLabel").pack(pady=12)
 
     def show_home(self, tab: str = "contacts") -> None:
@@ -118,8 +127,19 @@ class RaspberryApp(tk.Tk):
         )
         pin = self.state.get("pin", "-")
         tk.Label(header, text=f"PIN: {pin}", bg="#111827", fg="#93c5fd", font=("Arial", 18, "bold")).grid(
-            row=0, column=1, padx=24, sticky="e"
+            row=0, column=1, padx=14, sticky="e"
         )
+        tk.Button(
+            header,
+            text="Exit",
+            bg="#374151",
+            fg="#ffffff",
+            activebackground="#1f2937",
+            font=("Arial", 14, "bold"),
+            padx=18,
+            pady=8,
+            command=self.destroy,
+        ).grid(row=0, column=2, padx=20, sticky="e")
 
         tabs = tk.Frame(root, bg="#e5e7eb")
         tabs.grid(row=1, column=0, sticky="nsew")
@@ -165,13 +185,23 @@ class RaspberryApp(tk.Tk):
             return
 
         for contact in contacts:
-            name = contact.get("displayName") or contact.get("mobileDevice", {}).get("ownerName") or "Mobile"
+            mobile = contact.get("mobileDevice", {})
+            name = contact.get("displayName") or mobile.get("ownerName") or "Mobile"
+            mobile_pin = mobile.get("pairingPin") or "-"
+            mobile_id = mobile.get("id") or "-"
             row = tk.Frame(parent, bg="#ffffff", padx=18, pady=14)
             row.pack(fill="x", pady=8)
             row.columnconfigure(0, weight=1)
             tk.Label(row, text=name, bg="#ffffff", fg="#111827", font=("Arial", 20, "bold")).grid(
                 row=0, column=0, sticky="w"
             )
+            tk.Label(
+                row,
+                text=f"PIN: {mobile_pin}  Device: {str(mobile_id)[:8]}",
+                bg="#ffffff",
+                fg="#6b7280",
+                font=("Arial", 12),
+            ).grid(row=1, column=0, sticky="w", pady=(4, 0))
             tk.Button(
                 row,
                 text="Call",
@@ -247,29 +277,32 @@ class RaspberryApp(tk.Tk):
 
     def show_active_call(self) -> None:
         self.clear()
+        self.attributes("-fullscreen", True)
         frame = tk.Frame(self, bg="#000000")
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
 
-        preview = tk.Frame(frame, bg="#050505")
-        preview.grid(row=0, column=0, sticky="nsew")
-        preview.columnconfigure(0, weight=1)
-        preview.rowconfigure(0, weight=1)
-        tk.Label(
-            preview,
-            text="Camera Preview",
-            bg="#050505",
+        self.camera_label = tk.Label(
+            frame,
+            text="Starting camera...",
+            bg="#000000",
             fg="#f9fafb",
-            font=("Arial", 36, "bold"),
-        ).grid(row=0, column=0)
-        tk.Label(
-            preview,
-            text="Video chunks are being sent to the Main Server.",
-            bg="#050505",
-            fg="#9ca3af",
-            font=("Arial", 16),
-        ).grid(row=1, column=0, pady=8)
+            font=("Arial", 34, "bold"),
+            compound="center",
+        )
+        self.camera_label.grid(row=0, column=0, sticky="nsew")
+
+        top_bar = tk.Frame(frame, bg="#000000")
+        top_bar.place(relx=0.5, rely=0.04, anchor="n")
+        self.call_status_label = tk.Label(
+            top_bar,
+            text="Camera is starting. Video chunks will be sent automatically.",
+            bg="#000000",
+            fg="#f9fafb",
+            font=("Arial", 14, "bold"),
+        )
+        self.call_status_label.pack()
 
         controls = tk.Frame(frame, bg="#000000")
         controls.place(relx=0.5, rely=0.92, anchor="center")
@@ -280,13 +313,42 @@ class RaspberryApp(tk.Tk):
             fg="#ffffff",
             activebackground="#b91c1c",
             font=("Arial", 22, "bold"),
-            padx=48,
+            padx=52,
             pady=18,
             command=lambda: self.end_call("ended_by_raspberry"),
         ).pack()
 
         if self.current_session_id:
             self.media.start_video_upload(self.current_session_id)
+
+    def show_outgoing_ringing(self) -> None:
+        self.clear()
+        frame = tk.Frame(self, bg="#020617")
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+
+        box = tk.Frame(frame, bg="#020617")
+        box.grid(row=0, column=0)
+        tk.Label(
+            box,
+            text=self.current_peer_name or "Mobile",
+            bg="#020617",
+            fg="#f9fafb",
+            font=("Arial", 42, "bold"),
+        ).pack(pady=12)
+        tk.Label(box, text="Calling...", bg="#020617", fg="#cbd5e1", font=("Arial", 24)).pack(pady=8)
+        tk.Button(
+            box,
+            text="Cancel Call",
+            bg="#dc2626",
+            fg="#ffffff",
+            activebackground="#b91c1c",
+            font=("Arial", 24, "bold"),
+            padx=44,
+            pady=24,
+            command=lambda: self.end_call("cancelled_by_raspberry"),
+        ).pack(pady=70)
 
     def register(self) -> None:
         try:
@@ -321,8 +383,10 @@ class RaspberryApp(tk.Tk):
         try:
             session = self.api.start_call(contact_id)
             self.current_session_id = session["session_id"]
+            self.current_peer_name = name
+            self.call_state = "ringing_outgoing"
             self._append_history("outgoing", name, self.current_session_id, "ringing")
-            self.show_active_call()
+            self.show_outgoing_ringing()
         except Exception as exc:
             messagebox.showerror("Call failed", str(exc))
 
@@ -332,7 +396,8 @@ class RaspberryApp(tk.Tk):
         try:
             self.ringtone.stop()
             self.api.answer_call(self.current_session_id)
-            self._append_history("incoming", "Mobile caller", self.current_session_id, "active")
+            self.call_state = "active"
+            self._append_history("incoming", self.current_peer_name or "Mobile caller", self.current_session_id, "active")
             self.show_active_call()
         except Exception as exc:
             messagebox.showerror("Answer failed", str(exc))
@@ -345,14 +410,17 @@ class RaspberryApp(tk.Tk):
             return
 
         session_id = self.current_session_id
+        peer_name = self.current_peer_name or "Unknown"
         self.ringtone.stop()
         self.media.stop_video_upload()
         try:
             self.api.end_call(session_id, reason)
         except ApiError:
             pass
-        self._append_history("call", "Unknown", session_id, reason)
+        self._append_history("call", peer_name, session_id, reason)
         self.current_session_id = None
+        self.current_peer_name = None
+        self.call_state = None
         self.show_home("contacts")
 
     def _start_realtime_if_ready(self) -> None:
@@ -372,31 +440,66 @@ class RaspberryApp(tk.Tk):
         self.realtime.start()
 
     def _drain_events(self) -> None:
+        latest_camera_frame: bytes | None = None
         try:
             while True:
                 name, payload = self.events.get_nowait()
+                if name == "camera_frame":
+                    latest_camera_frame = payload.get("ppm")
+                    continue
                 self._handle_event(name, payload)
         except Empty:
             pass
+        if latest_camera_frame:
+            self._render_camera_frame(latest_camera_frame)
         self.after(150, self._drain_events)
 
     def _handle_event(self, name: str, payload: dict[str, Any]) -> None:
         if name == "incoming_call":
+            self.current_peer_name = payload.get("caller_name", "Mobile caller")
+            self.call_state = "ringing_incoming"
             self.show_incoming(payload)
         elif name == "call_accepted":
             self.current_session_id = payload.get("session_id", self.current_session_id)
+            self.call_state = "active"
             self.show_active_call()
         elif name == "call_ended":
+            was_ringing = self.call_state in {"ringing_outgoing", "ringing_incoming"}
+            reason = payload.get("reason", "call_ended")
             self.current_session_id = None
+            self.current_peer_name = None
+            self.call_state = None
             self.ringtone.stop()
             self.media.stop_video_upload()
             self.show_home("contacts")
+            if was_ringing:
+                messagebox.showinfo("Call ended", f"Call was not answered: {reason}")
         elif name == "ai_video":
             url = payload.get("video_url")
             if url:
                 self.media.play_video(url)
+        elif name == "camera_frame":
+            self._render_camera_frame(payload.get("ppm"))
+        elif name == "media_status":
+            if self.call_status_label:
+                self.call_status_label.configure(text=payload.get("message", "Camera active"))
         elif name == "media_error":
-            print(payload.get("message", payload), flush=True)
+            message = payload.get("message", str(payload))
+            if self.call_status_label:
+                self.call_status_label.configure(text=message, fg="#fca5a5")
+            print(message, flush=True)
+
+    def _render_camera_frame(self, ppm: bytes | None) -> None:
+        if not ppm or not self.camera_label:
+            return
+        try:
+            self.camera_photo = tk.PhotoImage(data=ppm, format="PPM")
+            self.camera_label.configure(image=self.camera_photo, text="")
+            if self.call_status_label:
+                self.call_status_label.configure(text="Camera live - sending video chunks", fg="#bbf7d0")
+        except Exception as exc:
+            if self.call_status_label:
+                self.call_status_label.configure(text=f"Cannot render camera frame: {exc}", fg="#fca5a5")
 
     def _load_pending_call(self) -> None:
         if not self.pending_call_path:

@@ -107,7 +107,19 @@ export class CallsService {
       throw badRequest('Mobile calls must set to: "raspberry"');
     }
 
-    const raspberry = await this.devices.findRaspberry();
+    const pairedContact = await this.prisma.contact.findFirst({
+      where: {
+        mobileDeviceId: caller.id,
+        raspberryDevice: {
+          deviceType: DeviceType.raspberry,
+          deletedAt: null,
+        },
+      },
+      include: { raspberryDevice: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const raspberry = pairedContact?.raspberryDevice ?? (await this.devices.findRaspberry());
     if (!raspberry) {
       throw notFound('Raspberry Pi device not found');
     }

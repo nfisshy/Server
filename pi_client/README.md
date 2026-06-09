@@ -12,7 +12,7 @@ http://172.20.10.3:3000
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-tk libcamera-apps mpv
+sudo apt install -y python3 python3-venv python3-tk python3-opencv mpv
 
 cd pi_client
 python3 -m venv .venv
@@ -130,10 +130,9 @@ Luu y quan trong: de tu mo GUI Tkinter khi co cuoc goi, Raspberry phai dang co d
 
 ## Toi uu toc do
 
-- Ung dung khong decode video bang Python.
-- Quay video bang `libcamera-vid` native cua Raspberry.
-- Moi chunk mac dinh 1.5 giay, 640x480, 15 FPS, H264.
-- Khi dong y cuoc goi, app tu mo man hinh call toan man hinh va bat dau gui video chunk lien tuc len Main Server.
+- Camera duoc mo bang OpenCV `cv2.VideoCapture(0)`, giong code test da chay duoc tren Raspberry.
+- Moi chunk mac dinh gom 15 frame JPEG, 640x480, sample 15 FPS.
+- Khi dong y cuoc goi, app hien camera truc tiep trong trang call full-screen va gui video chunk lien tuc len Main Server.
 - Phat video tu Server B bang `mpv`, tranh render trong Tkinter.
 - WebSocket chay thread rieng, GUI chi nhan event qua queue nen khong bi dung.
 - Listener nen giu ket noi khi GUI tat, giup Raspberry van nhan duoc cuoc goi den.

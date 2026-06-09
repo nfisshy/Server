@@ -42,7 +42,7 @@ export class DevicesService {
       data: { authTokenHash: await this.auth.hashToken(token) },
     });
 
-    if (device.deviceType === DeviceType.raspberry) {
+    if (device.deviceType === DeviceType.raspberry || device.deviceType === DeviceType.mobile) {
       const pin = await this.createPin(device.id);
       return { device_id: device.id, device_type: device.deviceType, auth_token: token, pin };
     }

@@ -4,6 +4,8 @@ import { Controller, Get } from '@nestjs/common';
 export class AppController {
   @Get('health')
   health() {
-    return { ok: true };
+    return { status: 'ok' ,
+      timestamp: new Date().toISOString()
+    };
   }
 }
