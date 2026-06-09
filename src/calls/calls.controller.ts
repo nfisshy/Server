@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentDevice } from '../auth/current-device.decorator';
 import { DeviceAuthGuard } from '../auth/device-auth.guard';
 import { forbidden } from '../common/errors';
@@ -35,5 +35,10 @@ export class CallsController {
       throw forbidden('Ending device must match authenticated device');
     }
     return this.calls.end(dto);
+  }
+
+  @Get(':sessionId')
+  getSession(@Param('sessionId') sessionId: string, @CurrentDevice() device: Device) {
+    return this.calls.getSessionForDevice(sessionId, device.id);
   }
 }

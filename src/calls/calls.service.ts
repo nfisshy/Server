@@ -77,6 +77,14 @@ export class CallsService {
     return this.getSession(sessionId);
   }
 
+  async getSessionForDevice(sessionId: string, deviceId: string) {
+    const session = await this.getSession(sessionId);
+    if (![session.callerDeviceId, session.calleeDeviceId].includes(deviceId)) {
+      throw forbidden('Device is not part of this session');
+    }
+    return this.serialize(session);
+  }
+
   private async startFromRaspberry(dto: StartCallDto, caller: Device) {
     if (!dto.contact_id) {
       throw badRequest('contact_id is required when Raspberry Pi starts a call');

@@ -48,6 +48,7 @@ class RaspberryApp(tk.Tk):
         self.ring_signal_after_id: str | None = None
         self.active_signal_after_id: str | None = None
         self.ring_timeout_after_id: str | None = None
+        self.session_reconcile_after_id: str | None = None
 
         self._build_style()
         self._bind_keys()
@@ -324,6 +325,7 @@ class RaspberryApp(tk.Tk):
         if self.current_session_id:
             self.media.start_video_upload(self.current_session_id)
             self._start_active_signals(self.current_session_id)
+            self._start_session_reconcile(self.current_session_id)
 
     def show_outgoing_ringing(self) -> None:
         self.clear()
@@ -392,6 +394,7 @@ class RaspberryApp(tk.Tk):
             self._append_history("outgoing", name, self.current_session_id, "ringing")
             self.show_outgoing_ringing()
             self._start_ringing_signals(self.current_session_id)
+            self._start_session_reconcile(self.current_session_id)
         except Exception as exc:
             messagebox.showerror("Call failed", str(exc))
 
@@ -467,6 +470,7 @@ class RaspberryApp(tk.Tk):
             self.call_state = "ringing_incoming"
             self.show_incoming(payload)
             self._start_ringing_signals(self.current_session_id)
+            self._start_session_reconcile(self.current_session_id)
         elif name == "call_accepted":
             self.current_session_id = payload.get("session_id", self.current_session_id)
             self.call_state = "active"
@@ -567,6 +571,46 @@ class RaspberryApp(tk.Tk):
             except Exception:
                 pass
             self.active_signal_after_id = None
+        if self.session_reconcile_after_id:
+            try:
+                self.after_cancel(self.session_reconcile_after_id)
+            except Exception:
+                pass
+            self.session_reconcile_after_id = None
+
+    def _start_session_reconcile(self, session_id: str) -> None:
+        if self.session_reconcile_after_id:
+            try:
+                self.after_cancel(self.session_reconcile_after_id)
+            except Exception:
+                pass
+            self.session_reconcile_after_id = None
+        self.session_reconcile_after_id = self.after(2000, lambda: self._session_reconcile_tick(session_id))
+
+    def _session_reconcile_tick(self, session_id: str) -> None:
+        if self.current_session_id != session_id:
+            return
+        try:
+            session = self.api.get_call_session(session_id)
+            status = session.get("status")
+            if status == "active" and self.call_state != "active":
+                self.call_state = "active"
+                self._stop_ringing_signals()
+                self.show_active_call()
+                return
+            if status == "ended":
+                self.ringtone.stop()
+                self.media.stop_video_upload()
+                self._stop_call_signals()
+                self.current_session_id = None
+                self.current_peer_name = None
+                self.call_state = None
+                self.show_home("contacts")
+                messagebox.showinfo("Call ended", "Call ended")
+                return
+        except Exception as exc:
+            print(f"Session reconcile failed: {exc}", flush=True)
+        self.session_reconcile_after_id = self.after(2000, lambda: self._session_reconcile_tick(session_id))
 
     def _render_camera_frame(self, ppm: bytes | None) -> None:
         if not ppm or not self.camera_label:

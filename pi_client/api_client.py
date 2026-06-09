@@ -48,6 +48,9 @@ class ApiClient:
             json={"session_id": session_id, "device_id": self.device_id, "reason": reason},
         )
 
+    def get_call_session(self, session_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/call/{session_id}")
+
     def upload_video_chunk(self, session_id: str, path: Path) -> dict[str, Any]:
         content_type = "video/x-motion-jpeg" if path.suffix.lower() in {".mjpeg", ".mjpg"} else "video/h264"
         with path.open("rb") as file_handle:
