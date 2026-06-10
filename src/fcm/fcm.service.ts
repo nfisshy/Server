@@ -36,7 +36,8 @@ export class FcmService {
       return false;
     }
 
-      await admin.messaging().send({
+    try {
+      const messageId = await admin.messaging().send({
         token,
         data: payload,
         android: {
@@ -45,6 +46,11 @@ export class FcmService {
         },
         apns: { payload: { aps: { contentAvailable: true, sound: 'default' } } },
       });
-    return true;
+      this.logger.log(`FCM DATA_ONLY SENT ${messageId} session=${payload.session_id}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`FCM SEND FAILED: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 }
