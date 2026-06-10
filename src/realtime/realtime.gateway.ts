@@ -46,6 +46,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       await this.auth.verifyDeviceToken(deviceId, token);
       client.deviceId = deviceId;
       await this.realtime.markOnline(deviceId, client.id);
+      this.logger.log(`WS_CONNECTED device=${deviceId} socket=${client.id}`);
     } catch (error) {
       this.logger.warn(`Socket rejected: ${error instanceof Error ? error.message : String(error)}`);
       client.disconnect(true);
@@ -54,6 +55,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   async handleDisconnect(client: AuthedSocket) {
     await this.realtime.markOfflineBySocket(client.id);
+    this.logger.log(`WS_DISCONNECTED device=${client.deviceId ?? '-'} socket=${client.id}`);
   }
 
   @SubscribeMessage('heartbeat')
@@ -67,6 +69,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       return;
     }
     await this.realtime.heartbeat(deviceId, client.id);
+    this.logger.debug(`HEARTBEAT device=${deviceId} socket=${client.id}`);
     client.emit('heartbeat_ack', {});
   }
 
@@ -79,6 +82,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       client.disconnect(true);
       return;
     }
+    this.logger.debug(`CALL_SIGNAL_IN device=${client.deviceId} session=${body.session_id} type=${body.signal_type}`);
     await this.realtime.routeCallSignal(client.deviceId, body.session_id, body.signal_type, body);
   }
 }

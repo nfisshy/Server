@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CallSession, CallStatus, Device, DeviceType } from '@prisma/client';
 import { badRequest, forbidden, notFound } from '../common/errors';
@@ -13,6 +13,8 @@ import { StartCallDto } from './dto/start-call.dto';
 
 @Injectable()
 export class CallsService {
+  private readonly logger = new Logger(CallsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -31,6 +33,7 @@ export class CallsService {
 
   async answer(dto: AnswerCallDto) {
     const session = await this.getSession(dto.session_id);
+    this.logger.log(`CALL_ANSWER_REQUEST session=${dto.session_id} device=${dto.device_id} status=${session.status}`);
     if (![session.callerDeviceId, session.calleeDeviceId].includes(dto.device_id)) {
       throw forbidden('Device is not part of this session');
     }
@@ -46,11 +49,13 @@ export class CallsService {
 
     const otherDeviceId = dto.device_id === updated.callerDeviceId ? updated.calleeDeviceId : updated.callerDeviceId;
     await this.realtime.sendToDevice(otherDeviceId, 'call_accepted', { session_id: updated.id });
+    this.logger.log(`CALL_ACCEPTED session=${updated.id} answered_by=${dto.device_id} notify=${otherDeviceId}`);
     return this.serialize(updated);
   }
 
   async end(dto: EndCallDto) {
     const session = await this.getSession(dto.session_id);
+    this.logger.log(`CALL_END_REQUEST session=${dto.session_id} device=${dto.device_id} reason=${dto.reason ?? 'ended_by_device'}`);
     if (![session.callerDeviceId, session.calleeDeviceId].includes(dto.device_id)) {
       throw forbidden('Device is not part of this session');
     }
@@ -70,6 +75,7 @@ export class CallsService {
         reason: updated.endReason,
       }),
     ]);
+    this.logger.log(`CALL_ENDED session=${updated.id} reason=${updated.endReason}`);
     return this.serialize(updated);
   }
 
@@ -98,6 +104,7 @@ export class CallsService {
     }
 
     const session = await this.createSession(caller.id, contact.mobileDeviceId);
+    this.logger.log(`CALL_START raspberry_to_mobile session=${session.id} from=${caller.id} to=${contact.mobileDeviceId} contact=${contact.id}`);
     const payload = {
       session_id: session.id,
       caller_name: caller.ownerName ?? 'Raspberry Pi',
@@ -105,7 +112,10 @@ export class CallsService {
     };
     const delivered = await this.realtime.sendToDevice(contact.mobileDeviceId, 'incoming_call', payload);
     if (!delivered) {
+      this.logger.warn(`CALL_START websocket_not_delivered session=${session.id} target=${contact.mobileDeviceId}; trying_fcm`);
       await this.fcm.sendIncomingCall(contact.mobileDevice.fcmToken, payload);
+    } else {
+      this.logger.log(`CALL_START websocket_delivered session=${session.id} target=${contact.mobileDeviceId}`);
     }
     return this.serialize(session);
   }
@@ -136,6 +146,7 @@ export class CallsService {
     }
 
     const session = await this.createSession(caller.id, raspberry.id);
+    this.logger.log(`CALL_START mobile_to_raspberry session=${session.id} from=${caller.id} to=${raspberry.id}`);
     await this.realtime.sendToDevice(raspberry.id, 'incoming_call', {
       session_id: session.id,
       caller_name: caller.ownerName ?? 'Mobile caller',

@@ -43,27 +43,33 @@ class RealtimeClient:
     def _bind_events(self) -> None:
         @self.sio.event
         def connect() -> None:
+            print(f"[PI_WS] connected device={self.device_id}", flush=True)
             self.events.put(("socket_status", {"connected": True}))
             self._start_heartbeat()
 
         @self.sio.event
         def disconnect() -> None:
+            print(f"[PI_WS] disconnected device={self.device_id}", flush=True)
             self.events.put(("socket_status", {"connected": False}))
 
         @self.sio.on("incoming_call")
         def incoming_call(data: dict[str, Any]) -> None:
+            print(f"[PI_WS] incoming_call {data}", flush=True)
             self.events.put(("incoming_call", data))
 
         @self.sio.on("call_accepted")
         def call_accepted(data: dict[str, Any]) -> None:
+            print(f"[PI_WS] call_accepted {data}", flush=True)
             self.events.put(("call_accepted", data))
 
         @self.sio.on("call_ended")
         def call_ended(data: dict[str, Any]) -> None:
+            print(f"[PI_WS] call_ended {data}", flush=True)
             self.events.put(("call_ended", data))
 
         @self.sio.on("peer_signal")
         def peer_signal(data: dict[str, Any]) -> None:
+            print(f"[PI_WS] peer_signal {data}", flush=True)
             self.events.put(("peer_signal", data))
 
         @self.sio.on("ai_video")
@@ -85,6 +91,7 @@ class RealtimeClient:
                 )
                 self.sio.wait()
             except Exception as exc:
+                print(f"[PI_WS] connect_error {exc}", flush=True)
                 self.events.put(("socket_error", {"message": str(exc)}))
                 time.sleep(3)
 
@@ -98,6 +105,7 @@ class RealtimeClient:
         while not self.stop_event.is_set():
             if self.sio.connected:
                 try:
+                    print(f"[PI_WS] heartbeat device={self.device_id}", flush=True)
                     self.sio.emit("heartbeat", {"device_id": self.device_id})
                 except Exception as exc:
                     self.events.put(("socket_error", {"message": str(exc)}))
@@ -105,8 +113,10 @@ class RealtimeClient:
 
     def send_call_signal(self, session_id: str, signal_type: str) -> None:
         if not self.sio.connected:
+            print(f"[PI_WS] skip_call_signal disconnected session={session_id} type={signal_type}", flush=True)
             return
         try:
+            print(f"[PI_WS] emit_call_signal session={session_id} type={signal_type}", flush=True)
             self.sio.emit("call_signal", {"session_id": session_id, "signal_type": signal_type})
         except Exception as exc:
             self.events.put(("socket_error", {"message": str(exc)}))

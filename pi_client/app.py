@@ -387,8 +387,10 @@ class RaspberryApp(tk.Tk):
 
     def start_call(self, contact_id: str, name: str) -> None:
         try:
+            print(f"[PI_CALL] start_call contact={contact_id} name={name}", flush=True)
             session = self.api.start_call(contact_id)
             self.current_session_id = session["session_id"]
+            print(f"[PI_CALL] start_call_ok session={self.current_session_id} target={name}", flush=True)
             self.current_peer_name = name
             self.call_state = "ringing_outgoing"
             self._append_history("outgoing", name, self.current_session_id, "ringing")
@@ -396,12 +398,14 @@ class RaspberryApp(tk.Tk):
             self._start_ringing_signals(self.current_session_id)
             self._start_session_reconcile(self.current_session_id)
         except Exception as exc:
+            print(f"[PI_CALL] start_call_error contact={contact_id} error={exc}", flush=True)
             messagebox.showerror("Call failed", str(exc))
 
     def answer_call(self) -> None:
         if not self.current_session_id:
             return
         try:
+            print(f"[PI_CALL] answer session={self.current_session_id}", flush=True)
             self.ringtone.stop()
             self.api.answer_call(self.current_session_id)
             self.call_state = "active"
@@ -409,6 +413,7 @@ class RaspberryApp(tk.Tk):
             self._stop_ringing_signals()
             self.show_active_call()
         except Exception as exc:
+            print(f"[PI_CALL] answer_error session={self.current_session_id} error={exc}", flush=True)
             messagebox.showerror("Answer failed", str(exc))
 
     def end_call(self, reason: str = "ended_by_raspberry") -> None:
@@ -420,13 +425,14 @@ class RaspberryApp(tk.Tk):
 
         session_id = self.current_session_id
         peer_name = self.current_peer_name or "Unknown"
+        print(f"[PI_CALL] end_call session={session_id} reason={reason}", flush=True)
         self.ringtone.stop()
         self.media.stop_video_upload()
         self._stop_call_signals()
         try:
             self.api.end_call(session_id, reason)
         except ApiError:
-            pass
+            print(f"[PI_CALL] end_call_api_error session={session_id}", flush=True)
         self._append_history("call", peer_name, session_id, reason)
         self.current_session_id = None
         self.current_peer_name = None
@@ -465,6 +471,8 @@ class RaspberryApp(tk.Tk):
         self.after(150, self._drain_events)
 
     def _handle_event(self, name: str, payload: dict[str, Any]) -> None:
+        if name in {"incoming_call", "call_accepted", "call_ended", "peer_signal", "socket_error"}:
+            print(f"[PI_EVENT] {name} {payload}", flush=True)
         if name == "incoming_call":
             self.current_peer_name = payload.get("caller_name", "Mobile caller")
             self.call_state = "ringing_incoming"
@@ -521,6 +529,7 @@ class RaspberryApp(tk.Tk):
     def _start_ringing_signals(self, session_id: str | None) -> None:
         if not session_id:
             return
+        print(f"[PI_SIGNAL] start_ringing session={session_id}", flush=True)
         self._stop_ringing_signals()
         self._send_call_signal(session_id, "ringing")
         self.ring_signal_after_id = self.after(2000, lambda: self._ringing_signal_tick(session_id))
@@ -534,9 +543,11 @@ class RaspberryApp(tk.Tk):
 
     def _ringing_timeout(self, session_id: str) -> None:
         if self.current_session_id == session_id and self.call_state in {"ringing_outgoing", "ringing_incoming"}:
+            print(f"[PI_CALL] ringing_timeout session={session_id}", flush=True)
             self.end_call("missed_timeout")
 
     def _start_active_signals(self, session_id: str) -> None:
+        print(f"[PI_SIGNAL] start_active session={session_id}", flush=True)
         if self.active_signal_after_id:
             self.after_cancel(self.active_signal_after_id)
             self.active_signal_after_id = None
@@ -550,6 +561,7 @@ class RaspberryApp(tk.Tk):
         self.active_signal_after_id = self.after(5000, lambda: self._active_signal_tick(session_id))
 
     def _send_call_signal(self, session_id: str, signal_type: str) -> None:
+        print(f"[PI_SIGNAL] send session={session_id} type={signal_type}", flush=True)
         if self.realtime:
             self.realtime.send_call_signal(session_id, signal_type)
 
@@ -593,6 +605,7 @@ class RaspberryApp(tk.Tk):
         try:
             session = self.api.get_call_session(session_id)
             status = session.get("status")
+            print(f"[PI_RECONCILE] session={session_id} status={status} state={self.call_state}", flush=True)
             if status == "active" and self.call_state != "active":
                 self.call_state = "active"
                 self._stop_ringing_signals()
